@@ -119,7 +119,11 @@ async function run() {
     app.patch('/users/:id', async (req, res) => {
       try {
         const id = req.params.id;
-        const { coverImage, profileImage } = req.body; // <- updated keys
+        const { coverImage, profileImage } = req.body;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ message: 'Invalid user ID' });
+        }
 
         const updateFields = {};
         if (coverImage) updateFields.coverImage = coverImage;
@@ -146,22 +150,24 @@ async function run() {
     app.patch('/users/verify', async (req, res) => {
       try {
         const { email } = req.body;
+        if (!email)
+          return res.status(400).send({ message: 'Email is required' });
 
         const result = await usersCollection.updateOne(
           { email },
-          {
-            $set: {
-              emailVerified: true,
-              verifiedAt: new Date(),
-            },
-          }
+          { $set: { emailVerified: true, verifiedAt: new Date() } }
         );
 
-        res.send(result);
+        if (result.matchedCount === 0)
+          return res.status(404).send({ message: 'User not found' });
+
+        res.send({ message: 'User verified', result });
       } catch (error) {
+        console.error(error);
         res.status(500).send({ message: 'Server error' });
       }
     });
+
 
     //Package showing API
     app.get('/packages', async (req, res) => {
@@ -175,6 +181,21 @@ async function run() {
     });
 
     // My Package API
+    app.get('/myPackage', async (req, res) => {
+      const email = req.query.email;
+
+      if (!email) {
+        return res.status(400).send({ message: 'Email is required' });
+      }
+
+      const result = await myPackageCollection
+        .find({ userEmail: email })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      res.send(result);
+    });
+
     app.get('/myPackage/check', async (req, res) => {
       const { email, packageId } = req.query;
 
@@ -220,8 +241,32 @@ async function run() {
 
       res.send(result);
     });
+    app.delete('/myPackage/:id', async (req, res) => {
+      const id = req.params.id;
+
+      const result = await myPackageCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+
+      res.send(result);
+    });
 
     //Bookmark API
+    app.get('/bookmark', async (req, res) => {
+      const email = req.query.email;
+
+      if (!email) {
+        return res.status(400).send({ message: 'Email is required' });
+      }
+
+      const result = await bookmarkCollection
+        .find({ userEmail: email })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      res.send(result);
+    });
+
     app.get('/bookmark/check', async (req, res) => {
       const { email, packageId } = req.query;
 
@@ -246,6 +291,15 @@ async function run() {
       const result = await bookmarkCollection.insertOne({
         ...data,
         createdAt: new Date(),
+      });
+
+      res.send(result);
+    });
+    app.delete('/bookmark/:id', async (req, res) => {
+      const id = req.params.id;
+
+      const result = await bookmarkCollection.deleteOne({
+        _id: new ObjectId(id),
       });
 
       res.send(result);
