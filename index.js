@@ -147,9 +147,10 @@ async function run() {
       }
     });
 
-    app.patch('/users/verify', async (req, res) => {
+    app.put('/users/verify', async (req, res) => {
       try {
         const { email } = req.body;
+        console.log(email);
         if (!email)
           return res.status(400).send({ message: 'Email is required' });
 
@@ -167,7 +168,6 @@ async function run() {
         res.status(500).send({ message: 'Server error' });
       }
     });
-
 
     //Package showing API
     app.get('/packages', async (req, res) => {
