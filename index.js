@@ -421,6 +421,32 @@ async function run() {
       res.send(result);
     });
 
+    app.delete('/users/:id', verifyToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        const user = await usersCollection.findOne({ _id: new ObjectId(id) });
+        if (!user) {
+          return res.status(404).send({ message: 'User not found' });
+        }
+
+        if (user.role === 'admin') {
+          return res.status(403).send({ message: 'Cannot delete admin users' });
+        }
+
+        const result = await usersCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        res.send({
+          success: true,
+          message: 'User deleted successfully',
+          result,
+        });
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        res.status(500).send({ success: false, message: 'Server error' });
+      }
+    });
 
   } finally {
     // Ensures that the client will close when you finish/error
