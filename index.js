@@ -354,6 +354,74 @@ async function run() {
 
       res.send(result);
     });
+
+    //Admin Dashboard
+    //all users
+    app.get('/users', verifyToken, async (req, res) => {
+      const users = await usersCollection.find().toArray();
+      res.send(users);
+    });
+
+    app.get('/bookmarks', verifyToken, async (req, res) => {
+      const result = await bookmarkCollection
+        .find()
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      res.send(result);
+    });
+
+    app.get('/myPackages', verifyToken, async (req, res) => {
+      const purchased = await myPackageCollection.find().toArray();
+      res.send(purchased);
+    });
+
+    app.post('/packages', verifyToken, async (req, res) => {
+      const packageData = req.body;
+
+      if (!packageData?.title) {
+        return res.status(400).send({ message: 'Invalid package data' });
+      }
+
+      const result = await packageCollection.insertOne(packageData);
+      res.send(result);
+    });
+
+    app.patch('/packages/:id', verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const updatedData = req.body;
+
+      const result = await packageCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            title: updatedData.title,
+            country: updatedData.country,
+            location: updatedData.location,
+            price: updatedData.price,
+            duration: updatedData.duration,
+            rating: updatedData.rating,
+            type: updatedData.type,
+            image: updatedData.image,
+          },
+        }
+      );
+
+      res.send(result);
+    });
+
+
+    app.delete('/packages/:id', verifyToken, async (req, res) => {
+      const id = req.params.id;
+
+      const result = await packageCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+
+      res.send(result);
+    });
+
+
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
