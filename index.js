@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const app = express();
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT_URL || 5000;
 
@@ -12,6 +14,7 @@ app.use(
     credentials: true,
   })
 );
+app.use(cookieParser());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.nhw49.mongodb.net/?appName=Cluster0`;
 
@@ -38,6 +41,54 @@ async function run() {
     const packageCollection = client.db('goExplore').collection('packages');
     const myPackageCollection = client.db('goExplore').collection('myPackage');
     const bookmarkCollection = client.db('goExplore').collection('bookmark');
+
+    //JWT Token API
+    app.post('/jwt', async (req, res) => {
+      const user = req.body; // { email }
+
+      if (!user?.email) {
+        return res.status(400).send({ message: 'Email required' });
+      }
+
+      const token = jwt.sign(user, process.env.JWT_SECRET_TOKEN, {
+        expiresIn: '7d',
+      });
+
+      res
+        .cookie('token', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+        })
+        .send({ success: true });
+    });
+
+    const verifyToken = (req, res, next) => {
+      const token = req.cookies.token;
+
+      if (!token) {
+        return res.status(401).send({ message: 'Unauthorized' });
+      }
+
+      jwt.verify(token, process.env.JWT_SECRET_TOKEN, (err, decoded) => {
+        if (err) {
+          return res.status(401).send({ message: 'Invalid token' });
+        }
+
+        req.decoded = decoded;
+        next();
+      });
+    };
+
+    app.post('/logout', (req, res) => {
+      res
+        .clearCookie('token', {
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+        })
+        .send({ success: true });
+    });
 
     // User data API
     app.get('/users/email/:email', async (req, res) => {
@@ -150,7 +201,6 @@ async function run() {
     app.put('/users/verify', async (req, res) => {
       try {
         const { email } = req.body;
-        console.log(email);
         if (!email)
           return res.status(400).send({ message: 'Email is required' });
 
@@ -181,7 +231,7 @@ async function run() {
     });
 
     // My Package API
-    app.get('/myPackage', async (req, res) => {
+    app.get('/myPackage', verifyToken, async (req, res) => {
       const email = req.query.email;
 
       if (!email) {
@@ -207,7 +257,7 @@ async function run() {
       res.send({ exists: !!exists });
     });
 
-    app.get('/myPackage/count/:email', async (req, res) => {
+    app.get('/myPackage/count/:email', verifyToken, async (req, res) => {
       try {
         const email = req.params.email;
 
@@ -222,7 +272,7 @@ async function run() {
       }
     });
 
-    app.post('/myPackage', async (req, res) => {
+    app.post('/myPackage', verifyToken, async (req, res) => {
       const data = req.body;
 
       const exists = await myPackageCollection.findOne({
@@ -241,7 +291,7 @@ async function run() {
 
       res.send(result);
     });
-    app.delete('/myPackage/:id', async (req, res) => {
+    app.delete('/myPackage/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
 
       const result = await myPackageCollection.deleteOne({
@@ -252,7 +302,7 @@ async function run() {
     });
 
     //Bookmark API
-    app.get('/bookmark', async (req, res) => {
+    app.get('/bookmark', verifyToken, async (req, res) => {
       const email = req.query.email;
 
       if (!email) {
@@ -267,7 +317,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get('/bookmark/check', async (req, res) => {
+    app.get('/bookmark/check', verifyToken, async (req, res) => {
       const { email, packageId } = req.query;
 
       const exists = await bookmarkCollection.findOne({
@@ -277,7 +327,7 @@ async function run() {
 
       res.send({ exists: !!exists });
     });
-    app.post('/bookmark', async (req, res) => {
+    app.post('/bookmark', verifyToken, async (req, res) => {
       const data = req.body;
       const exists = await bookmarkCollection.findOne({
         userEmail: data.userEmail,
@@ -295,7 +345,7 @@ async function run() {
 
       res.send(result);
     });
-    app.delete('/bookmark/:id', async (req, res) => {
+    app.delete('/bookmark/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
 
       const result = await bookmarkCollection.deleteOne({
