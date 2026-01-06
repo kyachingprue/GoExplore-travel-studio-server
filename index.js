@@ -41,6 +41,10 @@ async function run() {
     const packageCollection = client.db('goExplore').collection('packages');
     const myPackageCollection = client.db('goExplore').collection('myPackage');
     const bookmarkCollection = client.db('goExplore').collection('bookmark');
+    const experiencesCollection = client
+      .db('goExplore')
+      .collection('experiences');
+    const reviewsCollection = client.db('goExplore').collection('reviews')
 
     //JWT Token API
     app.post('/jwt', async (req, res) => {
@@ -291,6 +295,7 @@ async function run() {
 
       res.send(result);
     });
+
     app.delete('/myPackage/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
 
@@ -299,6 +304,137 @@ async function run() {
       });
 
       res.send(result);
+    });
+
+    //Reviews & Ratings
+   app.get('/reviews', async (req, res) => {
+     try {
+       const { packageId, userEmail } = req.query;
+
+       // Build query dynamically
+       const query = {};
+       if (packageId) query.packageId = packageId;
+       if (userEmail) query.userEmail = userEmail;
+
+       // Fetch reviews from MongoDB
+       const reviews = await reviewsCollection
+         .find(query)
+         .sort({ createdAt: -1 })
+         .toArray();
+
+       res.send(reviews);
+     } catch (error) {
+       console.error('GET /reviews error:', error);
+       res.status(500).send({ message: 'Failed to get reviews' });
+     }
+   });
+
+
+   app.get('/reviews/average/:packageId', async (req, res) => {
+     try {
+       const { packageId } = req.params;
+
+       const result = await reviewsCollection
+         .aggregate([
+           { $match: { packageId } },
+           {
+             $group: {
+               _id: '$packageId',
+               avgRating: { $avg: '$rating' },
+               totalReviews: { $sum: 1 },
+             },
+           },
+         ])
+         .toArray();
+
+       if (!result.length) {
+         return res.send({ avgRating: 0, totalReviews: 0 });
+       }
+
+       res.send({
+         avgRating: Number(result[0].avgRating.toFixed(1)),
+         totalReviews: result[0].totalReviews,
+       });
+     } catch (error) {
+       console.error('GET /reviews/average error:', error);
+       res.status(500).send({ message: 'Failed to calculate rating' });
+     }
+   });
+
+
+    app.post('/reviews', async (req, res) => {
+      try {
+        const {
+          packageId,
+          packageTitle,
+          packageImage,
+          userName,
+          userEmail,
+          rating,
+          comment,
+        } = req.body;
+
+        if (
+          !packageId ||
+          !userName ||
+          !packageImage||
+          !userEmail ||
+          !comment ||
+          rating < 1 ||
+          rating > 5
+        ) {
+          return res.status(400).send({ message: 'Invalid review data' });
+        }
+
+        const reviewDoc = {
+          packageId,
+          packageTitle,
+          packageImage,
+          userName,
+          userEmail,
+          rating: Number(rating),
+          comment,
+          createdAt: new Date(),
+        };
+
+        const result = await reviewsCollection.insertOne(reviewDoc);
+
+        res.send({
+          success: true,
+          insertedId: result.insertedId,
+        });
+      } catch (error) {
+        console.error('POST /reviews error:', error);
+        res.status(500).send({ message: 'Failed to submit review' });
+      }
+    });
+
+    app.put('/reviews/:id', async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { comment, rating } = req.body;
+        const result = await reviewsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { comment, rating: Number(rating) } }
+        );
+        res.send(result);
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: 'Failed to update review' });
+      }
+    });
+
+    app.delete('/reviews/:id', async (req, res) => {
+      try {
+        const { id } = req.params;
+        const result = await reviewsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        res.send(result);
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: 'Failed to delete review' });
+      }
     });
 
     //Bookmark API
@@ -362,6 +498,38 @@ async function run() {
       res.send(users);
     });
 
+
+    app.get('/experiences', async (req, res) => {
+      try {
+        const experiences = await experiencesCollection
+          .find({})
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.send(experiences);
+      } catch (error) {
+        res.status(500).send({ message: 'Failed to fetch experiences' });
+      }
+    });
+
+    app.get('/experiences/:id', async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        const experience = await experiencesCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!experience) {
+          return res.status(404).send({ message: 'Experience not found' });
+        }
+
+        res.send(experience);
+      } catch (error) {
+        res.status(500).send({ message: 'Failed to get experience' });
+      }
+    });
+
     app.get('/bookmarks', verifyToken, async (req, res) => {
       const result = await bookmarkCollection
         .find()
@@ -387,6 +555,25 @@ async function run() {
       res.send(result);
     });
 
+    app.post('/experiences', async (req, res) => {
+      try {
+        const experience = req.body;
+
+        if (!experience?.title || !experience?.image) {
+          return res.status(400).send({ message: 'Missing required fields' });
+        }
+
+        const result = await experiencesCollection.insertOne(experience);
+
+        res.send({
+          success: true,
+          insertedId: result.insertedId,
+        });
+      } catch (error) {
+        res.status(500).send({ message: 'Failed to add experience' });
+      }
+    });
+
     app.patch('/packages/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
       const updatedData = req.body;
@@ -410,6 +597,24 @@ async function run() {
       res.send(result);
     });
 
+   app.patch('/experiences/:id', async (req, res) => {
+     try {
+       const { id } = req.params;
+       const updatedData = { ...req.body };
+
+       delete updatedData._id;
+
+       const result = await experiencesCollection.updateOne(
+         { _id: new ObjectId(id) },
+         { $set: updatedData }
+       );
+
+       res.send(result);
+     } catch (error) {
+       console.error(error); // log error for debugging
+       res.status(500).send({ message: 'Failed to update experience' });
+     }
+   });
 
     app.delete('/packages/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
@@ -419,6 +624,20 @@ async function run() {
       });
 
       res.send(result);
+    });
+
+    app.delete('/experiences/:id', async (req, res) => {
+      try {
+        const { id } = req.params;
+
+        const result = await experiencesCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: 'Failed to delete experience' });
+      }
     });
 
     app.delete('/users/:id', verifyToken, async (req, res) => {
@@ -447,7 +666,6 @@ async function run() {
         res.status(500).send({ success: false, message: 'Server error' });
       }
     });
-
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
