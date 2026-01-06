@@ -370,6 +370,7 @@ async function run() {
           packageImage,
           userName,
           userEmail,
+          userImage,
           rating,
           comment,
         } = req.body;
@@ -379,6 +380,7 @@ async function run() {
           !userName ||
           !packageImage||
           !userEmail ||
+          !userImage ||
           !comment ||
           rating < 1 ||
           rating > 5
@@ -392,6 +394,7 @@ async function run() {
           packageImage,
           userName,
           userEmail,
+          userImage,
           rating: Number(rating),
           comment,
           createdAt: new Date(),
@@ -492,12 +495,23 @@ async function run() {
     });
 
     //Admin Dashboard
-    //all users
     app.get('/users', verifyToken, async (req, res) => {
       const users = await usersCollection.find().toArray();
       res.send(users);
     });
 
+    app.get('/reviews/admin', async (req, res) => {
+      try {
+        const reviews = await reviewsCollection
+          .find({})
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.status(200).json(reviews);
+      } catch (err) {
+        console.error(err); // <-- check what this prints
+        res.status(500).json({ message: 'Failed to fetch reviews' });
+      }
+    });
 
     app.get('/experiences', async (req, res) => {
       try {
