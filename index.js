@@ -44,7 +44,7 @@ async function run() {
     const experiencesCollection = client
       .db('goExplore')
       .collection('experiences');
-    const reviewsCollection = client.db('goExplore').collection('reviews')
+    const reviewsCollection = client.db('goExplore').collection('reviews');
 
     //JWT Token API
     app.post('/jwt', async (req, res) => {
@@ -250,6 +250,24 @@ async function run() {
       res.send(result);
     });
 
+    app.get('/myPackage/:id', async (req, res) => {
+      const { id } = req.params;
+
+      try {
+        const packageData = await myPackageCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!packageData)
+          return res.status(404).send({ message: 'Package not found' });
+
+        res.send(packageData);
+      } catch (error) {
+        console.error(error);
+        res.status(400).send({ message: 'Invalid ID' });
+      }
+    });
+
     app.get('/myPackage/check', async (req, res) => {
       const { email, packageId } = req.query;
 
@@ -307,60 +325,58 @@ async function run() {
     });
 
     //Reviews & Ratings
-   app.get('/reviews', async (req, res) => {
-     try {
-       const { packageId, userEmail } = req.query;
+    app.get('/reviews', async (req, res) => {
+      try {
+        const { packageId, userEmail } = req.query;
 
-       // Build query dynamically
-       const query = {};
-       if (packageId) query.packageId = packageId;
-       if (userEmail) query.userEmail = userEmail;
+        // Build query dynamically
+        const query = {};
+        if (packageId) query.packageId = packageId;
+        if (userEmail) query.userEmail = userEmail;
 
-       // Fetch reviews from MongoDB
-       const reviews = await reviewsCollection
-         .find(query)
-         .sort({ createdAt: -1 })
-         .toArray();
+        // Fetch reviews from MongoDB
+        const reviews = await reviewsCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .toArray();
 
-       res.send(reviews);
-     } catch (error) {
-       console.error('GET /reviews error:', error);
-       res.status(500).send({ message: 'Failed to get reviews' });
-     }
-   });
+        res.send(reviews);
+      } catch (error) {
+        console.error('GET /reviews error:', error);
+        res.status(500).send({ message: 'Failed to get reviews' });
+      }
+    });
 
+    app.get('/reviews/average/:packageId', async (req, res) => {
+      try {
+        const { packageId } = req.params;
 
-   app.get('/reviews/average/:packageId', async (req, res) => {
-     try {
-       const { packageId } = req.params;
+        const result = await reviewsCollection
+          .aggregate([
+            { $match: { packageId } },
+            {
+              $group: {
+                _id: '$packageId',
+                avgRating: { $avg: '$rating' },
+                totalReviews: { $sum: 1 },
+              },
+            },
+          ])
+          .toArray();
 
-       const result = await reviewsCollection
-         .aggregate([
-           { $match: { packageId } },
-           {
-             $group: {
-               _id: '$packageId',
-               avgRating: { $avg: '$rating' },
-               totalReviews: { $sum: 1 },
-             },
-           },
-         ])
-         .toArray();
+        if (!result.length) {
+          return res.send({ avgRating: 0, totalReviews: 0 });
+        }
 
-       if (!result.length) {
-         return res.send({ avgRating: 0, totalReviews: 0 });
-       }
-
-       res.send({
-         avgRating: Number(result[0].avgRating.toFixed(1)),
-         totalReviews: result[0].totalReviews,
-       });
-     } catch (error) {
-       console.error('GET /reviews/average error:', error);
-       res.status(500).send({ message: 'Failed to calculate rating' });
-     }
-   });
-
+        res.send({
+          avgRating: Number(result[0].avgRating.toFixed(1)),
+          totalReviews: result[0].totalReviews,
+        });
+      } catch (error) {
+        console.error('GET /reviews/average error:', error);
+        res.status(500).send({ message: 'Failed to calculate rating' });
+      }
+    });
 
     app.post('/reviews', async (req, res) => {
       try {
@@ -378,7 +394,7 @@ async function run() {
         if (
           !packageId ||
           !userName ||
-          !packageImage||
+          !packageImage ||
           !userEmail ||
           !userImage ||
           !comment ||
@@ -500,7 +516,7 @@ async function run() {
       res.send(users);
     });
 
-    app.get('/reviews/admin', async (req, res) => {
+    app.get('/reviews/admin', verifyToken, async (req, res) => {
       try {
         const reviews = await reviewsCollection
           .find({})
@@ -513,6 +529,7 @@ async function run() {
       }
     });
 
+    //Not add VerifyToken
     app.get('/experiences', async (req, res) => {
       try {
         const experiences = await experiencesCollection
@@ -526,6 +543,7 @@ async function run() {
       }
     });
 
+    //Not add VerifyToken
     app.get('/experiences/:id', async (req, res) => {
       try {
         const { id } = req.params;
@@ -569,7 +587,7 @@ async function run() {
       res.send(result);
     });
 
-    app.post('/experiences', async (req, res) => {
+    app.post('/experiences', verifyToken, async (req, res) => {
       try {
         const experience = req.body;
 
@@ -611,24 +629,24 @@ async function run() {
       res.send(result);
     });
 
-   app.patch('/experiences/:id', async (req, res) => {
-     try {
-       const { id } = req.params;
-       const updatedData = { ...req.body };
+    app.patch('/experiences/:id', verifyToken, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const updatedData = { ...req.body };
 
-       delete updatedData._id;
+        delete updatedData._id;
 
-       const result = await experiencesCollection.updateOne(
-         { _id: new ObjectId(id) },
-         { $set: updatedData }
-       );
+        const result = await experiencesCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updatedData }
+        );
 
-       res.send(result);
-     } catch (error) {
-       console.error(error); // log error for debugging
-       res.status(500).send({ message: 'Failed to update experience' });
-     }
-   });
+        res.send(result);
+      } catch (error) {
+        console.error(error); // log error for debugging
+        res.status(500).send({ message: 'Failed to update experience' });
+      }
+    });
 
     app.delete('/packages/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
@@ -640,7 +658,42 @@ async function run() {
       res.send(result);
     });
 
-    app.delete('/experiences/:id', async (req, res) => {
+    app.patch('/users/role/:id', verifyToken, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { role } = req.body;
+
+        // Validation
+        if (!role || !['user', 'admin'].includes(role)) {
+          return res.status(400).send({ message: 'Invalid role value' });
+        }
+
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            role,
+            updatedAt: new Date(),
+          },
+        };
+
+        const result = await usersCollection.updateOne(filter, updateDoc);
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: 'User not found' });
+        }
+
+        res.send({
+          success: true,
+          message: 'User role updated successfully',
+          modifiedCount: result.modifiedCount,
+        });
+      } catch (error) {
+        console.error('Role update error:', error);
+        res.status(500).send({ message: 'Failed to update user role' });
+      }
+    });
+
+    app.delete('/experiences/:id', verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
 
@@ -651,33 +704,6 @@ async function run() {
         res.send(result);
       } catch (error) {
         res.status(500).send({ message: 'Failed to delete experience' });
-      }
-    });
-
-    app.delete('/users/:id', verifyToken, async (req, res) => {
-      try {
-        const id = req.params.id;
-
-        const user = await usersCollection.findOne({ _id: new ObjectId(id) });
-        if (!user) {
-          return res.status(404).send({ message: 'User not found' });
-        }
-
-        if (user.role === 'admin') {
-          return res.status(403).send({ message: 'Cannot delete admin users' });
-        }
-
-        const result = await usersCollection.deleteOne({
-          _id: new ObjectId(id),
-        });
-        res.send({
-          success: true,
-          message: 'User deleted successfully',
-          result,
-        });
-      } catch (error) {
-        console.error('Error deleting user:', error);
-        res.status(500).send({ success: false, message: 'Server error' });
       }
     });
   } finally {
