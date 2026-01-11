@@ -7,6 +7,8 @@ const cookieParser = require('cookie-parser');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT_URL || 5000;
 
+
+const stripe = require('stripe')(process.env.VITE_GATWAY_KEY);
 app.use(express.json());
 app.use(
   cors({
@@ -509,6 +511,25 @@ async function run() {
 
       res.send(result);
     });
+
+    //Payment intent API
+   app.post('/create-payment-intent', async (req, res) => {
+     const { amountInCents } = req.body;
+
+     try {
+       const paymentIntent = await stripe.paymentIntents.create({
+         amount: amountInCents,
+         currency: 'usd',
+         payment_method_types: ['card'],
+       });
+
+       res.json({ clientSecret: paymentIntent.client_secret });
+     } catch (error) {
+       console.error(error);
+       res.status(500).json({ error: error.message });
+     }
+   });
+
 
     //Admin Dashboard
     app.get('/users', verifyToken, async (req, res) => {
