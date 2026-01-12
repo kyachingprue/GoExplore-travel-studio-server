@@ -47,6 +47,7 @@ async function run() {
       .db('goExplore')
       .collection('experiences');
     const reviewsCollection = client.db('goExplore').collection('reviews');
+    const paymentsCollection = client.db('goExplore').collection('payments');
 
     //JWT Token API
     app.post('/jwt', async (req, res) => {
@@ -512,7 +513,46 @@ async function run() {
       res.send(result);
     });
 
-    //Payment intent API
+    //Payment intent
+    app.get('/payments', verifyToken, async (req, res) => {
+      try {
+        const requestedEmail = req.query.email;
+        const decodedEmail = req.decoded.email;
+
+        // get logged-in user role
+        const user = await usersCollection.findOne({ email: decodedEmail });
+
+        if (!user) {
+          return res.status(401).send({ message: 'Unauthorized' });
+        }
+
+        let query = {};
+
+        // ✅ Admin → can see all payments
+        if (user.role === 'admin') {
+          query = {};
+        }
+        // ✅ Normal user → only own payments
+        else {
+          if (requestedEmail !== decodedEmail) {
+            return res.status(403).send({ message: 'Forbidden access' });
+          }
+          query = { email: decodedEmail };
+        }
+
+        const options = { sort: { paidAt: -1 } };
+
+        const payments = await paymentsCollection
+          .find(query, options)
+          .toArray();
+
+        res.send(payments);
+      } catch (error) {
+        console.error('Error fetching payments history:', error);
+        res.status(500).send({ message: 'Failed to fetch payments history' });
+      }
+    });
+    
    app.post('/create-payment-intent', async (req, res) => {
      const { amountInCents } = req.body;
 
@@ -529,7 +569,55 @@ async function run() {
        res.status(500).json({ error: error.message });
      }
    });
+    
+    app.post('/payments', verifyToken, async (req, res) => {
+      try {
+        const { packageId, email, amount,status,paymentMethod,image,        packageName, transactionId } = req.body;
+        if (!packageId || !email || !amount || !paymentMethod || !transactionId) {
+          return res.status(400).send({ message: 'Missing required payment fields' });
+        }
+        const updateResult = await myPackageCollection.updateOne(
+          {
+            _id: new ObjectId(packageId)
+          }, 
+          {
+            $set: {
+              payment_status: 'paid' 
+          }}
+        )
+        if (updateResult.modifiedCount === 0) {
+          return res.status(404).send({ message: 'Package not found or already paid' });
+        }
+        const paymentDoc = {
+          packageId,
+          email,
+          amount,
+          image,
+          status,
+          packageName,
+          paymentMethod,
+          transactionId,
+          paidAt: new Date(),
+        };
+        const paymentResult = await paymentsCollection.insertOne(paymentDoc);
+        res.send({ message: 'Payment recorded successfully', paymentResult, updateResult, insertedId: paymentResult.insertedId });
+      } catch (error) {
+        console.error('Payment processing error:', error);
+        res.status(500).send({ message: "Failed to process payment" });
+      }
+    })
 
+    app.patch('/payments/:id', async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const result = await paymentsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status } }
+      );
+
+      res.send(result);
+    });
 
     //Admin Dashboard
     app.get('/users', verifyToken, async (req, res) => {
