@@ -553,7 +553,7 @@ async function run() {
       }
     });
     
-   app.post('/create-payment-intent', async (req, res) => {
+   app.post('/create-payment-intent', verifyToken, async (req, res) => {
      const { amountInCents } = req.body;
 
      try {
@@ -607,7 +607,7 @@ async function run() {
       }
     })
 
-    app.patch('/payments/:id', async (req, res) => {
+    app.patch('/payments/:id', verifyToken, async (req, res) => {
       const { id } = req.params;
       const { status } = req.body;
 
