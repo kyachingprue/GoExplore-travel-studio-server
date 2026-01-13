@@ -9,13 +9,26 @@ const port = process.env.PORT_URL || 5000;
 
 
 const stripe = require('stripe')(process.env.VITE_GATWAY_KEY);
-app.use(express.json());
 app.use(
   cors({
-    origin: ['http://localhost:5173'],
+    origin: function (origin, callback) {
+      const allowedOrigins = [
+        'http://localhost:5173',
+        'https://go-explore-travel-studio-client.vercel.app',
+        'https://go-explore-travel-studi-git-3544ff-kyachingprue-marmas-projects.vercel.app',
+        'https://go-explore-travel-studio-client-5qg8v73mt.vercel.app',
+      ];
+
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS not allowed'));
+      }
+    },
     credentials: true,
   })
 );
+app.use(express.json());
 app.use(cookieParser());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.nhw49.mongodb.net/?appName=Cluster0`;
@@ -32,12 +45,12 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
-    await client.db('admin').command({ ping: 1 });
-    console.log(
-      'Pinged your deployment. You successfully connected to MongoDB!'
-    );
+    // await client.db('admin').command({ ping: 1 });
+    // console.log(
+    //   'Pinged your deployment. You successfully connected to MongoDB!'
+    // );
 
     const usersCollection = client.db('goExplore').collection('users');
     const packageCollection = client.db('goExplore').collection('packages');
